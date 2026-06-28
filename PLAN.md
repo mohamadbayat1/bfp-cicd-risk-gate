@@ -1,7 +1,45 @@
 # PLAN.md — AI-in-CI/CD Build-Failure Prediction Pipeline
 
-**Progress: 9/35 (Phase 1 complete; Phase 2 awaiting user approval)**
-**Phase: 2 (Plan & propose) — STOP here for approval before Phase 3.**
+**Progress: 34/35 (Phases 1–4 done; full run complete; one thesis-narrative decision open)**
+**Phase: 5 (artifacts produced). Phase-2 checkpoint was APPROVED:
+grouped-by-project split, BETA=2 / r*=0.80 / p*=0.70, build with git.**
+
+### ⚠ KEY FINDING (full run, all 925,896 builds, seed 42)
+Leakage-free **grouped (cross-project)** split → **test ROC-AUC = 0.515** (≈ random),
+PR-AUC 0.252 (base rate 0.240), Brier 0.189. NO leakage alarm tripped
+(max feature importance 0.126 < 0.50). Chosen RF: `max_depth=16, max_features=sqrt,
+min_samples_leaf=20, n_estimators=400` (CV F-beta=0.295). Thresholds (validation):
+τ1=0.1376, τ2=0.5728 (no fallback; Recall@τ1=0.805 ✓ r*, Precision@τ2=0.70 ✓ p*).
+
+**Diagnostic (subsample, identical features/model):**
+| split | shared projects | ROC-AUC | PR-AUC |
+|---|---|---|---|
+| grouped (cross-project) | 0 | 0.559 | 0.391 |
+| random (within-project) | 570 | **0.845** | 0.749 |
+
+→ The pipeline is **not buggy** (random split = strong). The build-failure signal is
+**project-specific**: holding projects out (the leakage-free choice) collapses it to
+near-random; the high random-split number is project identity leaking across the split
+(the row-level leakage the spec warns about). **Honest cross-project result is ~0.51–0.56.**
+This is a real scientific contribution but leaves the predictive framework operationally
+weak cross-project. Open decision: whether to add a **per-project temporal** split (deploy
+within known projects, train on past builds → test on future builds; leakage-free, more
+operationally faithful, expected AUC between the two) as the PRIMARY scenario, with grouped
+kept as the cross-project generalization ablation. **Awaiting user decision.**
+
+### Approved-run split report (full data, seed 42)
+| split | builds | projects | failure_rate |
+|---|---|---|---|
+| train | 663,911 | 662 | 0.264 |
+| ├ train_fit | 540,695 | 562 | 0.279 |
+| └ calib | 123,216 | 100 | 0.197 |
+| val | 123,316 | 143 | 0.212 |
+| test | 138,669 | 143 | 0.240 |
+
+948 projects total, **no project on two sides**. Class ratios vary 0.20–0.28 across
+splits — the unavoidable cost of moving whole projects together; acceptable and reported.
+All 8 verification tests pass (incl. the 3 leakage tests). Env installed:
+scikit-learn 1.9.0, shap 0.52.0, matplotlib 3.11.0, joblib 1.5.3.
 
 This pipeline predicts, before a build finishes, the probability a CI build will FAIL,
 and maps that probability to PASS / WARN / ROLLBACK. Two phases: offline training,
@@ -176,33 +214,37 @@ features; any such drop will be justified and recorded here.
 - [x] Decide final leakage drop list + final feature set.
 - [x] Write DATASET PROFILE + leakage-suspect list into PLAN.md.
 
-### Phase 2 — Plan & propose  ⏳ (awaiting approval)
+### Phase 2 — Plan & propose  ✅
 - [x] Write full plan, config, deviations into PLAN.md and MEMORY.md.
-- [ ] **STOP — present profile + plan + deviations; get user approval before Phase 3.**
+- [x] STOP — presented profile + plan + deviations; user APPROVED (grouped split,
+      defaults BETA=2/r*=0.80/p*=0.70, build with git).
 
-### Phase 3 — Implement (offline + inference)  ☐
-- [ ] Git: `git init` + branch `thesis-pipeline` (repo is not yet a git repo).
-- [ ] Install & pin scikit-learn, shap, matplotlib, joblib; write `requirements.txt`.
-- [ ] Project layout: `src/`, `artifacts/`, `models/`, `tests/`, `config.py`.
-- [ ] `config.py`: paths, column lists, BETA / r* / p*, split fractions, seeds, search space.
-- [ ] Data loader: chunked read (usecols, na_values, downcast), dedup to build, target, drop list.
-- [ ] Grouped split (train/val/test) + grouped calibration carve; persist split indices/ids.
-- [ ] Preprocessing: label-encode (save mappings), median impute (train-only, saved),
-      feature engineering (churn_ratio, test_coverage_proxy).
-- [ ] RF + GridSearchCV (subsample, StratifiedGroupKFold, F-beta); log search & best params.
-- [ ] Refit best RF on full train; first-pass importance review; optional feature pruning.
-- [ ] Platt calibration on calibration subset.
-- [ ] Threshold sweep on validation → τ1, τ2 (+ fallback handling).
-- [ ] TreeSHAP (interventional) with passing-build background.
-- [ ] Inference path: feature extraction → saved encoders/medians → RF → Platt → decision → SHAP → payload.
-- [ ] Save all artifacts (model, calibrator, encoders, medians, thresholds, metadata).
+### Phase 3 — Implement (offline + inference)  ✅
+- [x] Git: `git init` + branch `thesis-pipeline`.
+- [x] Install & pin scikit-learn, shap, matplotlib, joblib; `requirements.txt`.
+- [x] Project layout: `bfp/` package, `tests/`, `models/`, `artifacts/`, `bfp/config.py`.
+- [x] `config.py`: paths, column lists, BETA / r* / p*, split fractions, seeds, search space.
+- [x] Data loader: chunked stream-dedup to build, target, drop list (`bfp/data.py`).
+- [x] Grouped split + grouped calibration carve (`bfp/splits.py`).
+- [x] Preprocessing: label-encode (saved), median impute (train-only, saved),
+      feature engineering (`bfp/preprocess.py`).
+- [x] RF + GridSearchCV (subsample, StratifiedGroupKFold, F-beta) (`bfp/model.py`).
+- [x] Refit best RF on full train; importance review via artifacts.
+- [x] Platt calibration on calibration subset.
+- [x] Threshold sweep on validation → τ1, τ2 (+ fallback handling).
+- [x] TreeSHAP (interventional) with passing-build background.
+- [x] Inference path (`bfp/inference.py`): saved encoders/medians → RF → Platt → decision → SHAP.
+- [x] Save all artifacts (model, calibrator, preprocessor, thresholds, metadata).
 
-### Phase 4 — Verify  ☐
-- [ ] Tests 1–8 from <verification> as real automated tests; run until green
-      (leakage tests #1–3 are blocking).
+### Phase 4 — Verify  ✅
+- [x] Tests 1–8 from <verification> as real automated tests; **all 8 pass**
+      (leakage tests #1–3 green). Reproducibility asserted to float precision
+      (sub-ULP parallel-RF nondeterminism documented).
 
-### Phase 5 — Artifacts  ☐
-- [ ] Metrics (train/val/test): F1, Precision, Recall, ROC-AUC, PR-AUC, MCC, Brier.
-- [ ] Threshold-sweep table, calibration curve, confusion matrix, SHAP/importance summary.
-- [ ] Save all to `artifacts/`; write `LLM_PROMPT.md`.
-- [ ] Final report with pinned versions; tick PLAN.md; record decisions in MEMORY.md.
+### Phase 5 — Artifacts  ⏳ (full run in progress)
+- [x] Orchestrator writes metrics (train/val/test): F1, Precision, Recall, ROC-AUC,
+      PR-AUC, MCC, Brier; sweep table; calibration curve; confusion matrices;
+      SHAP/importance summary; plots → `artifacts/`.
+- [x] `LLM_PROMPT.md` written.
+- [ ] Record FINAL chosen hyperparameters + thresholds + test metrics here once the
+      full run completes; final leakage-alarm confirmation; commit Phase 5.

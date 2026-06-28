@@ -67,6 +67,21 @@ design, deviations). For each: what changed, why, which files, how to revert.
   calibration carve, proposed policy constants + fallbacks, subsampled grid search.
 - **Why:** keep code and thesis text consistent; all driven by the real data + zero-leakage rule.
 
+## D9 — KEY RESULT: failure signal is project-specific (cross-project ≈ random)
+- **What:** full-run grouped (cross-project) test ROC-AUC = 0.515 (≈ random); same
+  features/model on a random within-project split = 0.845. No leakage alarm tripped
+  (max importance 0.126). Chosen RF: max_depth=16, max_features=sqrt, min_samples_leaf=20,
+  n_estimators=400. Thresholds: τ1=0.1376, τ2=0.5728 (no fallback).
+- **Why it matters:** confirms zero leakage (no signal once project identity is removed)
+  AND that the high random-split number is project-identity leakage (the row-level leakage
+  the spec warns about). Pre-build diff features carry little transferable cross-project
+  signal. Pipeline verified correct (random split = strong), so 0.515 is a data/feature
+  finding, not a bug.
+- **Files:** artifacts/metrics.json, artifacts/metadata.json, REPORT.md.
+- **Open decision (D10):** add a per-project temporal split (leakage-free, operationally
+  faithful within known projects) as primary scenario, keeping grouped as ablation —
+  pending user approval. Revert: none needed; grouped pipeline is the current safe state.
+
 ## Environment notes
 - Installed: numpy 2.5.0, pandas 3.0.3, Python 3.12.10. **Missing (install Phase 3):**
   scikit-learn, shap, matplotlib, joblib.
