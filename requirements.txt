@@ -1,0 +1,8 @@
+# Pinned to the versions used to produce the Chapter-4 artifacts (Python 3.12).
+numpy==2.5.0
+pandas==3.0.3
+scikit-learn==1.9.0
+shap==0.52.0
+matplotlib==3.11.0
+joblib==1.5.3
+pytest>=8.0
