@@ -1,31 +1,36 @@
 # PLAN.md — AI-in-CI/CD Build-Failure Prediction Pipeline
 
-**Progress: 34/35 (Phases 1–4 done; full run complete; one thesis-narrative decision open)**
-**Phase: 5 (artifacts produced). Phase-2 checkpoint was APPROVED:
-grouped-by-project split, BETA=2 / r*=0.80 / p*=0.70, build with git.**
+**Progress: 35/35 — COMPLETE. All phases done; full run WITH historical features finished;
+all 9 tests green; artifacts + REPORT.md regenerated.**
+**Phase: done. Approved: grouped-by-project split, BETA=2 / r*=0.80 / p*=0.70, git;
++ leakage-free historical features (decision after the grouped-split null result).**
 
-### ⚠ KEY FINDING (full run, all 925,896 builds, seed 42)
-Leakage-free **grouped (cross-project)** split → **test ROC-AUC = 0.515** (≈ random),
-PR-AUC 0.252 (base rate 0.240), Brier 0.189. NO leakage alarm tripped
-(max feature importance 0.126 < 0.50). Chosen RF: `max_depth=16, max_features=sqrt,
-min_samples_leaf=20, n_estimators=400` (CV F-beta=0.295). Thresholds (validation):
-τ1=0.1376, τ2=0.5728 (no fallback; Recall@τ1=0.805 ✓ r*, Precision@τ2=0.70 ✓ p*).
+### ✓ FINAL RESULT (full run, all 925,896 builds, seed 42, grouped/cross-project, WITH history)
+**Test ROC-AUC = 0.860, PR-AUC = 0.748** (base rate 0.240), **Brier = 0.111**. CV
+F-beta = 0.731. NO leakage alarm tripped (max feature importance 0.235 < 0.50; ROC-AUC
+< 0.99). Chosen RF: `max_depth=16, max_features=sqrt, min_samples_leaf=20, n_estimators=400`.
+Thresholds (validation): **τ1=0.1095, τ2=0.4769** (τ1<τ2 ✓, no fallback;
+Recall@τ1=0.821 ✓ ≥ r*=0.80; ROLLBACK precision=0.736 ✓ ≥ p*=0.70).
+At τ1: precision 0.477, recall 0.821, F1 0.603, MCC 0.465.
+Top features (importance / SHAP): `hist_prev_status`, `hist_consec_fail`, `hist_fail_rate_5`.
+Three-state test confusion: actual_pass→{PASS 75371, WARN 22937, ROLLBACK 7068};
+actual_fail→{PASS 5965, WARN 7579, ROLLBACK 19749} (82% of failures flagged WARN/ROLLBACK).
 
-**Diagnostic (subsample, identical features/model):**
-| split | shared projects | ROC-AUC | PR-AUC |
+### ⚠ KEY METHODOLOGICAL FINDING (the scientific contribution)
+With **diff-level features only**, the leakage-free grouped (cross-project) model is
+**near-random (ROC-AUC 0.515)**, while a naive **random** split scores 0.845 on the same
+features/model — the gap is **project identity leaking across the split** (the row-level
+leakage the spec warns about). Adding leakage-free **per-project prior-build history**
+(`hist_*`, all shifted to use strictly-prior builds) supplies the *transferable* signal
+("recently-failing projects keep failing") and lifts the honest cross-project result to
+**0.860** — without reintroducing leakage (verified: temporal ordering exact, alarms clean,
+test #9 guards the shift).
+
+| configuration (test, grouped/cross-project) | ROC-AUC | PR-AUC | Brier |
 |---|---|---|---|
-| grouped (cross-project) | 0 | 0.559 | 0.391 |
-| random (within-project) | 570 | **0.845** | 0.749 |
-
-→ The pipeline is **not buggy** (random split = strong). The build-failure signal is
-**project-specific**: holding projects out (the leakage-free choice) collapses it to
-near-random; the high random-split number is project identity leaking across the split
-(the row-level leakage the spec warns about). **Honest cross-project result is ~0.51–0.56.**
-This is a real scientific contribution but leaves the predictive framework operationally
-weak cross-project. Open decision: whether to add a **per-project temporal** split (deploy
-within known projects, train on past builds → test on future builds; leakage-free, more
-operationally faithful, expected AUC between the two) as the PRIMARY scenario, with grouped
-kept as the cross-project generalization ablation. **Awaiting user decision.**
+| diff features only (leakage-free) | 0.515 | 0.252 | 0.189 |
+| diff + history (leakage-free) — **final** | **0.860** | **0.748** | **0.111** |
+| diff features, random split (project-identity leakage — ablation, do NOT report as result) | 0.845 | 0.749 | — |
 
 ### Approved-run split report (full data, seed 42)
 | split | builds | projects | failure_rate |
@@ -38,8 +43,8 @@ kept as the cross-project generalization ablation. **Awaiting user decision.**
 
 948 projects total, **no project on two sides**. Class ratios vary 0.20–0.28 across
 splits — the unavoidable cost of moving whole projects together; acceptable and reported.
-All 8 verification tests pass (incl. the 3 leakage tests). Env installed:
-scikit-learn 1.9.0, shap 0.52.0, matplotlib 3.11.0, joblib 1.5.3.
+All 9 verification tests pass (incl. the 3 leakage tests + the temporal-history test #9).
+Env installed: scikit-learn 1.9.0, shap 0.52.0, matplotlib 3.11.0, joblib 1.5.3.
 
 This pipeline predicts, before a build finishes, the probability a CI build will FAIL,
 and maps that probability to PASS / WARN / ROLLBACK. Two phases: offline training,
@@ -142,8 +147,18 @@ Expect modest model AUC (~0.65–0.75 literature range), which is the honest tar
 - `test_coverage_proxy = gh_test_lines_per_kloc * gh_sloc / 1000`  (test-line density × code
   size ÷ 1000; an estimate of test volume, NOT a true coverage ratio).
 
-A first-pass RF feature-importance review (Phase 3) may drop further low-value/redundant
-features; any such drop will be justified and recorded here.
+**Historical (6) — per-project, computed from each build's OWN PRIOR builds only**
+(builds ordered chronologically within a project by `tr_build_number`; every stat shifted
+by one so the current outcome is never included → known at trigger time, NOT leakage):
+`hist_prev_status` (previous build outcome), `hist_fail_rate_5`, `hist_fail_rate_20`,
+`hist_fail_rate_all` (rolling/expanding prior failure rate), `hist_consec_fail` (trailing
+run of consecutive prior failures), `hist_build_seq` (number of prior builds).
+`tr_build_number` is used only to order builds and is dropped from X (it is in the leakage
+drop list). **Total features = 32.**
+
+Temporal-ordering validated: `tr_build_number` 0% missing, per-project Spearman vs
+`tr_build_id` = 1.000 for all projects; `hist_prev_status` matches an independent
+shift-by-1 exactly; first build of each project = NaN. Automated test #9 guards this.
 
 ---
 
@@ -198,6 +213,11 @@ features; any such drop will be justified and recorded here.
 7. **Calibration subset carved grouped within train.**
 8. **Proposed policy constants** `r*=0.80`, `p*=0.70`, `BETA=2` + explicit fallback rules.
 9. **Dataset ≈ 3.88M rows** (>> 1–2M estimate) → grid search on a subsample, final fit on full.
+10. **Historical features added** (user-approved after the grouped-split null result): 6
+    per-project prior-build statistics (shifted, strictly-prior → leakage-free). This is the
+    transferable signal that generalizes across projects. Diagnostic: grouped (cross-project)
+    test ROC-AUC rose 0.559 → **0.894** on a subsample; max feature importance 0.226 (< 0.50,
+    no alarm). Full-run numbers recorded below once complete.
 
 ---
 

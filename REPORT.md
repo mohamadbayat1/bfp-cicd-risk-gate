@@ -19,65 +19,65 @@ _Seed 42. Versions: python=3.12.10, numpy=2.4.6, pandas=3.0.3, scikit_learn=1.9.
 ## Model & tuning
 - RandomForest (gini, class_weight=balanced, random_state=42).
 - Grid search: StratifiedGroupKFold(5), scoring fbeta(beta=2), on a stratified subsample of 80,000 (final model refit on the full training set).
-- Search space: `{'n_estimators': [200, 400], 'max_depth': [None, 16], 'min_samples_leaf': [1, 5, 20], 'max_features': ['sqrt', 0.4]}`
-- **Chosen hyperparameters:** `{'max_depth': 16, 'max_features': 'sqrt', 'min_samples_leaf': 20, 'n_estimators': 400}`  (CV F-beta=0.2952)
+- Search space: `{'n_estimators': [200, 400], 'max_depth': [16, None], 'min_samples_leaf': [5, 20], 'max_features': ['sqrt']}`
+- **Chosen hyperparameters:** `{'max_depth': 16, 'max_features': 'sqrt', 'min_samples_leaf': 20, 'n_estimators': 400}`  (CV F-beta=0.7313)
 
 ## Calibration & decision policy
 - Platt scaling (logistic, no class weight) on a held-out calibration subset carved from train.
 - Constants: BETA=2, r*=0.8, p*=0.7.
-- Thresholds (selected on VALIDATION only): **τ1=0.1376**, **τ2=0.5728**.
-  - Recall@τ1 = 0.8001 (target r*=0.8); Precision@τ2 = 0.7000 (target p*=0.7).
+- Thresholds (selected on VALIDATION only): **τ1=0.1095**, **τ2=0.4769**.
+  - Recall@τ1 = 0.8000 (target r*=0.8); Precision@τ2 = 0.7000 (target p*=0.7).
   - Fallback used: {'tau1': False, 'tau2': False}.
 - Decision: PASS if p<τ1; WARN if τ1≤p<τ2; ROLLBACK if p≥τ2.
 
 ## Metrics (threshold-based metrics at τ1; confusion as TP/FP/FN/TN)
 | split | ROC-AUC | PR-AUC | Brier | Precision | Recall | F1 | MCC | TP/FP/FN/TN |
 |---|---|---|---|---|---|---|---|---|
-| train | 0.8793 | 0.7876 | 0.1288 | 0.4324 | 0.9348 | 0.5913 | 0.4211 | 141214/185400/9846/204235 |
-| val | 0.5698 | 0.2742 | 0.1659 | 0.2247 | 0.8001 | 0.3509 | 0.0548 | 20913/72142/5225/25036 |
-| test | 0.5149 | 0.2516 | 0.1887 | 0.2520 | 0.8046 | 0.3838 | 0.0507 | 26787/79491/6506/25885 |
+| train | 0.9152 | 0.8527 | 0.0971 | 0.5432 | 0.9070 | 0.6794 | 0.5498 | 137011/115231/14049/274404 |
+| val | 0.8479 | 0.6898 | 0.1093 | 0.4336 | 0.8000 | 0.5624 | 0.4346 | 20911/27313/5227/69865 |
+| test | 0.8601 | 0.7477 | 0.1107 | 0.4767 | 0.8208 | 0.6031 | 0.4650 | 27328/30005/5965/75371 |
 
 ## Three-state decision confusion (test) — actual × decision
 | actual \ decision | PASS | WARN | ROLLBACK |
 |---|---|---|---|
-| pass | 25885 | 79475 | 16 |
-| fail | 6506 | 26615 | 172 |
+| pass | 75371 | 22937 | 7068 |
+| fail | 5965 | 7579 | 19749 |
 
 ## Leakage alarm check
-- Test ROC-AUC = 0.5149 (alarm if ≥ 0.99) → OK
-- Max single-feature importance = 0.1262 (alarm if ≥ 0.5) → OK
+- Test ROC-AUC = 0.8601 (alarm if ≥ 0.99) → OK
+- Max single-feature importance = 0.2349 (alarm if ≥ 0.5) → OK
 
 ## Top features — RF importance
 | rank | feature | importance |
 |---|---|---|
-| 1 | gh_sloc | 0.1262 |
-| 2 | test_coverage_proxy | 0.1134 |
-| 3 | gh_test_lines_per_kloc | 0.1127 |
-| 4 | gh_repo_num_commits | 0.1087 |
-| 5 | gh_test_cases_per_kloc | 0.1079 |
-| 6 | gh_repo_age | 0.0988 |
-| 7 | gh_team_size | 0.0970 |
-| 8 | gh_asserts_cases_per_kloc | 0.0935 |
-| 9 | gh_lang | 0.0381 |
-| 10 | git_prev_commit_resolution_status | 0.0323 |
-| 11 | gh_num_commits_on_files_touched | 0.0191 |
-| 12 | git_num_all_built_commits | 0.0111 |
+| 1 | hist_prev_status | 0.2349 |
+| 2 | hist_consec_fail | 0.2238 |
+| 3 | hist_fail_rate_5 | 0.1807 |
+| 4 | hist_fail_rate_20 | 0.1330 |
+| 5 | hist_fail_rate_all | 0.0808 |
+| 6 | hist_build_seq | 0.0159 |
+| 7 | gh_sloc | 0.0134 |
+| 8 | gh_test_cases_per_kloc | 0.0125 |
+| 9 | gh_repo_num_commits | 0.0123 |
+| 10 | test_coverage_proxy | 0.0116 |
+| 11 | gh_test_lines_per_kloc | 0.0111 |
+| 12 | gh_asserts_cases_per_kloc | 0.0103 |
 
 ## Top features — mean |TreeSHAP| (interventional, test sample)
 | rank | feature | mean_abs_shap |
 |---|---|---|
-| 1 | gh_test_cases_per_kloc | 0.02668 |
-| 2 | git_prev_commit_resolution_status | 0.02583 |
-| 3 | gh_test_lines_per_kloc | 0.02073 |
-| 4 | gh_lang | 0.02057 |
-| 5 | gh_repo_num_commits | 0.02029 |
-| 6 | test_coverage_proxy | 0.01852 |
-| 7 | gh_sloc | 0.01570 |
-| 8 | gh_team_size | 0.01194 |
-| 9 | gh_asserts_cases_per_kloc | 0.01095 |
-| 10 | gh_repo_age | 0.00997 |
-| 11 | git_num_all_built_commits | 0.00732 |
-| 12 | gh_diff_other_files | 0.00393 |
+| 1 | hist_consec_fail | 0.05943 |
+| 2 | hist_prev_status | 0.05425 |
+| 3 | hist_fail_rate_5 | 0.04373 |
+| 4 | hist_fail_rate_20 | 0.03917 |
+| 5 | hist_fail_rate_all | 0.03148 |
+| 6 | git_prev_commit_resolution_status | 0.01377 |
+| 7 | git_num_all_built_commits | 0.01027 |
+| 8 | gh_diff_other_files | 0.00969 |
+| 9 | gh_diff_files_modified | 0.00568 |
+| 10 | gh_diff_files_added | 0.00540 |
+| 11 | gh_is_pr | 0.00528 |
+| 12 | hist_build_seq | 0.00415 |
 
 ## Figures (in `artifacts/`)
 - `calibration_curve.png`

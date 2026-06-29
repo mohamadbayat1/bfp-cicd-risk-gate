@@ -125,3 +125,25 @@ def test_smoke_three_risk_levels(ctx):
     # monotonicity sanity: highest-prob build should not be PASS while lowest is ROLLBACK
     probs = [o["failure_probability"] for o in out]
     assert probs[0] <= probs[2]
+
+
+# ---------------------------------------------------------------- 9. temporal (history) leakage
+def test_history_excludes_current_build(ctx):
+    """Historical features must use STRICTLY PRIOR builds only. Recompute the
+    expanding failure rate WITH a shift and compare; a leaky (non-shifted) column
+    that included the current outcome would fail this."""
+    if not C.USE_HISTORY:
+        return
+    df = ctx["df"]
+    assert "hist_prev_status" in df.columns
+    # order columns must never reach the model
+    assert not (set(C.ORDER_COLS) & set(ctx["X"]["train_fit"].columns))
+    g = df.groupby(C.KEY_GROUP, sort=False)["y"]
+    exp_prev = g.shift(1)
+    exp_rate_all = g.transform(lambda s: s.shift(1).expanding().mean())
+    import numpy as np
+    assert np.allclose(df["hist_prev_status"].fillna(-1), exp_prev.fillna(-1))
+    assert np.allclose(df["hist_fail_rate_all"].fillna(-1), exp_rate_all.fillna(-1), atol=1e-6)
+    # first build of each project has no history -> prev status is NaN
+    firsts = df.groupby(C.KEY_GROUP, sort=False).head(1)
+    assert df.loc[firsts.index, "hist_prev_status"].isna().all()

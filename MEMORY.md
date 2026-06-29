@@ -67,20 +67,31 @@ design, deviations). For each: what changed, why, which files, how to revert.
   calibration carve, proposed policy constants + fallbacks, subsampled grid search.
 - **Why:** keep code and thesis text consistent; all driven by the real data + zero-leakage rule.
 
-## D9 — KEY RESULT: failure signal is project-specific (cross-project ≈ random)
-- **What:** full-run grouped (cross-project) test ROC-AUC = 0.515 (≈ random); same
-  features/model on a random within-project split = 0.845. No leakage alarm tripped
-  (max importance 0.126). Chosen RF: max_depth=16, max_features=sqrt, min_samples_leaf=20,
-  n_estimators=400. Thresholds: τ1=0.1376, τ2=0.5728 (no fallback).
-- **Why it matters:** confirms zero leakage (no signal once project identity is removed)
-  AND that the high random-split number is project-identity leakage (the row-level leakage
-  the spec warns about). Pre-build diff features carry little transferable cross-project
-  signal. Pipeline verified correct (random split = strong), so 0.515 is a data/feature
-  finding, not a bug.
-- **Files:** artifacts/metrics.json, artifacts/metadata.json, REPORT.md.
-- **Open decision (D10):** add a per-project temporal split (leakage-free, operationally
-  faithful within known projects) as primary scenario, keeping grouped as ablation —
-  pending user approval. Revert: none needed; grouped pipeline is the current safe state.
+## D9 — KEY METHODOLOGICAL FINDING: failure signal is project-specific
+- **What:** with diff-level features only, leakage-free grouped (cross-project) test
+  ROC-AUC = 0.515 (≈ random); the SAME features/model on a naive random split = 0.845.
+  The gap is project identity leaking across the split (row-level leakage the spec warns of).
+- **Why it matters:** confirms zero column-leakage (no transferable signal once projects are
+  held out) AND demonstrates why random splits inflate TravisTorrent results. Pipeline
+  verified correct (random split = strong), so 0.515 is a feature finding, not a bug.
+- **Files:** PLAN.md (ablation table), REPORT.md.
+
+## D10 — RESOLUTION: leakage-free historical features (FINAL model)
+- **What:** added 6 per-project history features (`hist_prev_status`, `hist_fail_rate_5/20/all`,
+  `hist_consec_fail`, `hist_build_seq`), each computed from STRICTLY PRIOR builds via a
+  per-project shift, ordered by `tr_build_number` (used only for ordering, dropped from X).
+  Final full-run grouped/cross-project test: **ROC-AUC 0.860, PR-AUC 0.748, Brier 0.111**,
+  CV F-beta 0.731. Thresholds τ1=0.1095, τ2=0.4769 (no fallback; Recall@τ1=0.821≥0.80,
+  ROLLBACK precision 0.736≥0.70). Chosen RF unchanged (depth16/sqrt/leaf20/400). Max
+  feature importance 0.235 (<0.50) — no alarm. Grid trimmed to 8 candidates (search-range
+  freedom) around the known-good neighborhood; final fit on full train.
+- **Why leakage-free:** history uses only past outcomes (known at trigger time); temporal
+  order validated (Spearman 1.0 vs build_id; shift matches manual); test #9 guards the shift.
+- **Files:** `bfp/config.py` (USE_HISTORY, FEATURES_HISTORICAL, ORDER_COLS, trimmed
+  PARAM_GRID), `bfp/data.py` (add_history), `bfp/preprocess.py` (NUMERIC_COLS),
+  `tests/test_pipeline.py` (test #9). Artifacts regenerated.
+- **Revert:** set `USE_HISTORY=False` in `config.py` (drops history, falls back to the
+  0.515 diff-only model) and restore the wider PARAM_GRID.
 
 ## Environment notes
 - Installed: numpy 2.5.0, pandas 3.0.3, Python 3.12.10. **Missing (install Phase 3):**

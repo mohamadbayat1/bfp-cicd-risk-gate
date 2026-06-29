@@ -38,7 +38,7 @@ class Preprocessor:
             classes = sorted(pd.unique(vals).tolist(), key=lambda x: str(x))
             self.cat_maps_[col] = {c: i for i, c in enumerate(classes)}
         # medians from TRAIN (numeric raw + engineered), computed AFTER engineering
-        for col in C.FEATURES_NUMERIC + C.FEATURES_ENGINEERED:
+        for col in C.NUMERIC_COLS + C.FEATURES_ENGINEERED:
             med = float(np.nanmedian(eng[col].to_numpy(dtype="float64")))
             self.medians_[col] = med if np.isfinite(med) else 0.0
         self.fitted_ = True
@@ -49,7 +49,7 @@ class Preprocessor:
         eng = engineer(df)
         out = pd.DataFrame(index=eng.index)
         # numeric + engineered: impute with saved train medians
-        for col in C.FEATURES_NUMERIC + C.FEATURES_ENGINEERED:
+        for col in C.NUMERIC_COLS + C.FEATURES_ENGINEERED:
             s = pd.to_numeric(eng[col], errors="coerce")
             # tame infinities from ratios before imputation
             s = s.replace([np.inf, -np.inf], np.nan)

@@ -40,12 +40,33 @@ FEATURES_CATEGORICAL = [
 # engineered (built in preprocessing from raw numerics)
 FEATURES_ENGINEERED = ["churn_ratio", "test_coverage_proxy"]
 
-# final model feature order (numeric raw + engineered + categorical-encoded)
-FEATURE_ORDER = FEATURES_NUMERIC + FEATURES_ENGINEERED + FEATURES_CATEGORICAL
+# historical features: per-project statistics over a build's OWN PRIOR builds only
+# (computed with a shift so the current outcome is never included). These are known
+# at trigger time (the project's earlier build outcomes) -> legitimate, NOT leakage.
+# This is the transferable signal ("recently-failing projects keep failing") that
+# generalizes across projects, unlike raw project identity.
+USE_HISTORY = True
+FEATURES_HISTORICAL = [
+    "hist_prev_status",     # outcome of the immediately previous build (0/1)
+    "hist_fail_rate_5",     # mean failure over previous 5 builds
+    "hist_fail_rate_20",    # mean failure over previous 20 builds
+    "hist_fail_rate_all",   # expanding mean failure over all previous builds
+    "hist_consec_fail",     # length of the trailing run of consecutive prior failures
+    "hist_build_seq",       # number of prior builds of this project (experience)
+]
+# columns used ONLY to order builds chronologically within a project (never features)
+ORDER_COLS = ["tr_build_number"]
 
-# columns to actually read from the CSV (features + keys + target only; skip the
-# giant hash-list columns entirely for speed/memory)
-USECOLS = [KEY_BUILD, KEY_GROUP, TARGET_RAW] + FEATURES_NUMERIC + FEATURES_CATEGORICAL
+# all numeric columns that get median-imputed (raw + historical)
+NUMERIC_COLS = FEATURES_NUMERIC + (FEATURES_HISTORICAL if USE_HISTORY else [])
+
+# final model feature order (numeric raw + historical + engineered + categorical-encoded)
+FEATURE_ORDER = NUMERIC_COLS + FEATURES_ENGINEERED + FEATURES_CATEGORICAL
+
+# columns to actually read from the CSV (features + keys + target + order-only cols;
+# skip the giant hash-list columns entirely for speed/memory)
+USECOLS = ([KEY_BUILD, KEY_GROUP, TARGET_RAW] + FEATURES_NUMERIC + FEATURES_CATEGORICAL
+           + (ORDER_COLS if USE_HISTORY else []))
 
 # ----------------------------------------------------------------------------- LEAKAGE DROP LIST (floor + extensions; the verification tests assert none reach X)
 # (a) post-outcome: known only during/after the build
@@ -83,11 +104,15 @@ RF_FIXED = dict(criterion="gini", class_weight="balanced", random_state=SEED, n_
 BETA = 2                              # F-beta cost ratio (missed failure vs false alarm)
 GRID_SUBSAMPLE = 80_000              # stratified subsample size for GridSearch
 CV_FOLDS = 5
+# Search ranges trimmed to the neighborhood found in the first full run
+# (max_depth=16, min_samples_leaf=20, n_estimators=400, max_features='sqrt') to keep a
+# single foreground/background run robust against interruption. 8 candidates x 5 folds =
+# 40 fits; final model still refit on the FULL training set. (Freedom: search ranges.)
 PARAM_GRID = {
     "n_estimators": [200, 400],
-    "max_depth": [None, 16],
-    "min_samples_leaf": [1, 5, 20],
-    "max_features": ["sqrt", 0.4],
+    "max_depth": [16, None],
+    "min_samples_leaf": [5, 20],
+    "max_features": ["sqrt"],
 }
 
 # ----------------------------------------------------------------------------- threshold policy (selected on VALIDATION only)

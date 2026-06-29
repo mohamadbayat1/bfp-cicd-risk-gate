@@ -66,10 +66,53 @@ def load_builds(max_rows: int | None = None, chunksize: int = 300_000,
     for col in C.FEATURES_NUMERIC:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float32")
 
-    # keep keys + raw features + target only
-    keep = [C.KEY_BUILD, C.KEY_GROUP] + C.FEATURES_NUMERIC + C.FEATURES_CATEGORICAL + ["y"]
+    # historical (per-project, prior-builds-only) features
+    if C.USE_HISTORY:
+        df = add_history(df)
+
+    # keep keys + raw/historical features + target only (order-only cols dropped)
+    hist = C.FEATURES_HISTORICAL if C.USE_HISTORY else []
+    keep = ([C.KEY_BUILD, C.KEY_GROUP] + C.FEATURES_NUMERIC + hist
+            + C.FEATURES_CATEGORICAL + ["y"])
     df = df[keep].reset_index(drop=True)
     return df
+
+
+def _trailing_run_of_ones(prev_outcomes: np.ndarray) -> np.ndarray:
+    """Vectorized length of the trailing run of 1s ending at each position."""
+    ones = (prev_outcomes == 1).astype(np.int64)
+    cs = np.cumsum(ones)
+    last_at_zero = np.where(ones == 0, cs, np.nan)
+    last_at_zero = pd.Series(last_at_zero).ffill().fillna(0).to_numpy()
+    return (cs - last_at_zero) * ones
+
+
+def add_history(df: pd.DataFrame) -> pd.DataFrame:
+    """Add per-project features computed from each build's OWN PRIOR builds only.
+
+    Builds are ordered chronologically within a project by ORDER_COLS (Travis build
+    number, monotonic per project) with the build id as a tiebreak. Every statistic
+    is shifted by one so the current build's outcome is NEVER part of its own feature
+    -> these are known at trigger time and are not leakage.
+    """
+    order_num = pd.to_numeric(df[C.ORDER_COLS[0]], errors="coerce")
+    bid_num = pd.to_numeric(df[C.KEY_BUILD], errors="coerce")
+    df = df.assign(_ord=order_num.values, _bid=bid_num.values)
+    df = df.sort_values([C.KEY_GROUP, "_ord", "_bid"], kind="mergesort").reset_index(drop=True)
+
+    gb = df.groupby(C.KEY_GROUP, sort=False)["y"]
+    df["hist_prev_status"] = gb.shift(1)
+    df["hist_fail_rate_5"] = gb.transform(lambda s: s.shift(1).rolling(5, min_periods=1).mean())
+    df["hist_fail_rate_20"] = gb.transform(lambda s: s.shift(1).rolling(20, min_periods=1).mean())
+    df["hist_fail_rate_all"] = gb.transform(lambda s: s.shift(1).expanding().mean())
+    df["hist_consec_fail"] = gb.transform(
+        lambda s: _trailing_run_of_ones(s.shift(1).fillna(0).to_numpy()))
+    df["hist_build_seq"] = gb.cumcount().astype("float32")
+
+    for col in ["hist_prev_status", "hist_fail_rate_5", "hist_fail_rate_20",
+                "hist_fail_rate_all", "hist_consec_fail"]:
+        df[col] = df[col].astype("float32")
+    return df.drop(columns=["_ord", "_bid"])
 
 
 def class_balance(df: pd.DataFrame) -> dict:
