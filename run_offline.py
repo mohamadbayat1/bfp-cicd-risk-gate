@@ -41,6 +41,8 @@ def main():
     ap.add_argument("--quick", action="store_true",
                     help="smaller grid + subsample for a fast smoke run")
     ap.add_argument("--no-plots", action="store_true")
+    ap.add_argument("--resume-grid", action="store_true",
+                    help="reuse the saved grid-search checkpoint instead of re-searching")
     args = ap.parse_args()
 
     C.ensure_dirs()
@@ -68,11 +70,19 @@ def main():
     grid = {"n_estimators": [200], "max_depth": [None, 16], "min_samples_leaf": [5],
             "max_features": ["sqrt"]} if args.quick else C.PARAM_GRID
     sub = 15000 if args.quick else C.GRID_SUBSAMPLE
-    log("grid search (StratifiedGroupKFold, F-beta) on stratified subsample")
-    best_params, search_summary = Model.tune_rf(
-        X["train_fit"], y["train_fit"], g["train_fit"], param_grid=grid,
-        subsample=sub, verbose=1)
-    log(f"best_params={best_params}  cv_fbeta={search_summary['best_cv_score']:.4f}")
+    ckpt = os.path.join(C.ARTIFACTS_DIR, "grid_search.json")
+    if args.resume_grid and os.path.exists(ckpt):
+        saved = json.load(open(ckpt))
+        best_params, search_summary = saved["best_params"], saved["search_summary"]
+        log(f"resumed grid-search checkpoint: best_params={best_params}  "
+            f"cv_fbeta={search_summary['best_cv_score']:.4f}")
+    else:
+        log("grid search (StratifiedGroupKFold, F-beta) on stratified subsample")
+        best_params, search_summary = Model.tune_rf(
+            X["train_fit"], y["train_fit"], g["train_fit"], param_grid=grid,
+            subsample=sub, verbose=1)
+        _save_json({"best_params": best_params, "search_summary": search_summary}, ckpt)
+        log(f"best_params={best_params}  cv_fbeta={search_summary['best_cv_score']:.4f}")
 
     # ----------------------------------------------------------------- refit on full train_fit
     log("refitting RF on full train_fit")

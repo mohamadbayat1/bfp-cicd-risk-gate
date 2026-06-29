@@ -80,11 +80,12 @@ design, deviations). For each: what changed, why, which files, how to revert.
 - **What:** added 6 per-project history features (`hist_prev_status`, `hist_fail_rate_5/20/all`,
   `hist_consec_fail`, `hist_build_seq`), each computed from STRICTLY PRIOR builds via a
   per-project shift, ordered by `tr_build_number` (used only for ordering, dropped from X).
-  Final full-run grouped/cross-project test: **ROC-AUC 0.860, PR-AUC 0.748, Brier 0.111**,
-  CV F-beta 0.731. Thresholds τ1=0.1095, τ2=0.4769 (no fallback; Recall@τ1=0.821≥0.80,
-  ROLLBACK precision 0.736≥0.70). Chosen RF unchanged (depth16/sqrt/leaf20/400). Max
-  feature importance 0.235 (<0.50) — no alarm. Grid trimmed to 8 candidates (search-range
-  freedom) around the known-good neighborhood; final fit on full train.
+  Final full-run grouped/cross-project test: **ROC-AUC 0.860, PR-AUC 0.749, Brier 0.111**,
+  CV F-beta 0.733. Thresholds τ1=0.1119, τ2=0.4662 (no fallback; Recall@τ1=0.80≥0.80,
+  ROLLBACK precision 0.734≥0.70). Chosen RF: depth16 / **max_features=0.4** / leaf20 / 400.
+  Max feature importance 0.281 (<0.50) — no alarm. **Full 24-candidate** grid search
+  (StratifiedGroupKFold, 5-fold; per-candidate table in `artifacts/grid_search.json`);
+  final fit on full train. run_offline supports `--resume-grid` (grid checkpointed).
 - **Why leakage-free:** history uses only past outcomes (known at trigger time); temporal
   order validated (Spearman 1.0 vs build_id; shift matches manual); test #9 guards the shift.
 - **Files:** `bfp/config.py` (USE_HISTORY, FEATURES_HISTORICAL, ORDER_COLS, trimmed

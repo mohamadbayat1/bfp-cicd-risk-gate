@@ -6,15 +6,17 @@ all 9 tests green; artifacts + REPORT.md regenerated.**
 + leakage-free historical features (decision after the grouped-split null result).**
 
 ### ✓ FINAL RESULT (full run, all 925,896 builds, seed 42, grouped/cross-project, WITH history)
-**Test ROC-AUC = 0.860, PR-AUC = 0.748** (base rate 0.240), **Brier = 0.111**. CV
-F-beta = 0.731. NO leakage alarm tripped (max feature importance 0.235 < 0.50; ROC-AUC
-< 0.99). Chosen RF: `max_depth=16, max_features=sqrt, min_samples_leaf=20, n_estimators=400`.
-Thresholds (validation): **τ1=0.1095, τ2=0.4769** (τ1<τ2 ✓, no fallback;
-Recall@τ1=0.821 ✓ ≥ r*=0.80; ROLLBACK precision=0.736 ✓ ≥ p*=0.70).
-At τ1: precision 0.477, recall 0.821, F1 0.603, MCC 0.465.
+**Test ROC-AUC = 0.860, PR-AUC = 0.749** (base rate 0.240), **Brier = 0.111**. CV
+F-beta = 0.733 over the **full 24-candidate** grid (StratifiedGroupKFold, 5-fold). NO
+leakage alarm tripped (max feature importance 0.281 < 0.50; ROC-AUC < 0.99). Chosen RF:
+`max_depth=16, max_features=0.4, min_samples_leaf=20, n_estimators=400`.
+Thresholds (validation): **τ1=0.1119, τ2=0.4662** (τ1<τ2 ✓, no fallback;
+Recall@τ1=0.80 ✓ ≥ r*=0.80; ROLLBACK precision=0.734 ✓ ≥ p*=0.70).
+At τ1: precision 0.475, recall 0.822, F1 0.602, MCC 0.463.
 Top features (importance / SHAP): `hist_prev_status`, `hist_consec_fail`, `hist_fail_rate_5`.
-Three-state test confusion: actual_pass→{PASS 75371, WARN 22937, ROLLBACK 7068};
-actual_fail→{PASS 5965, WARN 7579, ROLLBACK 19749} (82% of failures flagged WARN/ROLLBACK).
+Three-state test confusion: actual_pass→{PASS 75097, WARN 23084, ROLLBACK 7195};
+actual_fail→{PASS 5926, WARN 7554, ROLLBACK 19813} (82% of failures flagged WARN/ROLLBACK).
+Full per-candidate CV table saved to `artifacts/grid_search.json` (thesis defensibility).
 
 ### ⚠ KEY METHODOLOGICAL FINDING (the scientific contribution)
 With **diff-level features only**, the leakage-free grouped (cross-project) model is
@@ -29,7 +31,7 @@ test #9 guards the shift).
 | configuration (test, grouped/cross-project) | ROC-AUC | PR-AUC | Brier |
 |---|---|---|---|
 | diff features only (leakage-free) | 0.515 | 0.252 | 0.189 |
-| diff + history (leakage-free) — **final** | **0.860** | **0.748** | **0.111** |
+| diff + history (leakage-free) — **final** | **0.860** | **0.749** | **0.111** |
 | diff features, random split (project-identity leakage — ablation, do NOT report as result) | 0.845 | 0.749 | — |
 
 ### Approved-run split report (full data, seed 42)

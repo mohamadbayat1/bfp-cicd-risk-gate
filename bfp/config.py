@@ -104,15 +104,13 @@ RF_FIXED = dict(criterion="gini", class_weight="balanced", random_state=SEED, n_
 BETA = 2                              # F-beta cost ratio (missed failure vs false alarm)
 GRID_SUBSAMPLE = 80_000              # stratified subsample size for GridSearch
 CV_FOLDS = 5
-# Search ranges trimmed to the neighborhood found in the first full run
-# (max_depth=16, min_samples_leaf=20, n_estimators=400, max_features='sqrt') to keep a
-# single foreground/background run robust against interruption. 8 candidates x 5 folds =
-# 40 fits; final model still refit on the FULL training set. (Freedom: search ranges.)
+# Full search: 2 x 2 x 3 x 2 = 24 candidates x 5 folds = 120 fits. Grid search runs on
+# GRID_SUBSAMPLE; the final model is refit on the FULL training set.
 PARAM_GRID = {
     "n_estimators": [200, 400],
-    "max_depth": [16, None],
-    "min_samples_leaf": [5, 20],
-    "max_features": ["sqrt"],
+    "max_depth": [None, 16],
+    "min_samples_leaf": [1, 5, 20],
+    "max_features": ["sqrt", 0.4],
 }
 
 # ----------------------------------------------------------------------------- threshold policy (selected on VALIDATION only)

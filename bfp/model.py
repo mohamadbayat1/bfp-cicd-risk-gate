@@ -42,6 +42,13 @@ def tune_rf(X, y, groups, param_grid=None, subsample=C.GRID_SUBSAMPLE, verbose=1
     gscv = GridSearchCV(base, param_grid, scoring=scorer, cv=cv, n_jobs=-1,
                         refit=True, verbose=verbose)
     gscv.fit(Xs, ys, groups=gs)
+    r = gscv.cv_results_
+    candidates = sorted(
+        [{"params": p, "mean_test_score": float(m), "std_test_score": float(s),
+          "rank": int(rk)}
+         for p, m, s, rk in zip(r["params"], r["mean_test_score"],
+                                r["std_test_score"], r["rank_test_score"])],
+        key=lambda d: d["rank"])
     summary = {
         "search_subsample_n": int(len(ys)),
         "scoring": f"fbeta(beta={C.BETA})",
@@ -49,6 +56,8 @@ def tune_rf(X, y, groups, param_grid=None, subsample=C.GRID_SUBSAMPLE, verbose=1
         "best_params": gscv.best_params_,
         "best_cv_score": float(gscv.best_score_),
         "param_grid": param_grid,
+        "n_candidates": len(candidates),
+        "cv_results": candidates,           # full per-candidate table (thesis defensibility)
     }
     return gscv.best_params_, summary
 
