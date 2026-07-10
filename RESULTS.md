@@ -1,0 +1,185 @@
+# RESULTS.md — verified workflow & numbers (single source of truth)
+
+Consolidated from HANDOFF.md / CHAPTER4_PLAN.md / REPORT.md (now deleted). Every number
+here comes from on-disk artifacts (`artifacts/`, `models/`, `chapter4/`) and **matches
+the current thesis Chapter 4 (`chapter4_v2.docx`)**. Nothing is hand-invented; re-running
+the pipeline reproduces these values (seed 42, deterministic to ≥9 decimals).
+
+> **One-line result:** a leakage-free Random Forest + Platt calibration predicts CI build
+> failure before the build runs; honest cross-project test result **ROC-AUC 0.8602 /
+> PR-AUC 0.7489 / Brier 0.1105**. Central finding: diff-level features do NOT transfer
+> across projects (0.5149 ≈ random); **per-project prior-build history is the
+> transferable signal** (lifts to 0.8602 with zero leakage).
+
+---
+
+## 1. How to reproduce everything
+
+```bash
+pip install -r requirements.txt          # pinned: numpy 2.4.6, pandas 3.0.3, sklearn 1.9.0, shap 0.52.0, joblib 1.5.3 (python 3.12.10)
+# place final-2017.csv (TravisTorrent 2017) in repo root
+python run_offline.py                    # full offline pipeline (~15 min; --resume-grid to skip re-search)
+pytest -q                                # 9 verification tests (leakage, consistency, reproducibility)
+python make_report.py                    # regenerate auto-summary from artifacts
+
+# Chapter-4 tables/figures (each script regenerates its own outputs):
+python chapter4/scripts/t1_*.py  t2_*.py  t3_rescore_curves.py
+
+# Ablation (writes to chapter4/ablation/, never overwrites main artifacts):
+BFP_USE_HISTORY=0 BFP_MODELS_DIR=.../diffonly_grouped/models BFP_ARTIFACTS_DIR=.../diffonly_grouped/artifacts python run_offline.py
+python chapter4/scripts/t4b_diffonly_random_diagnostic.py
+python chapter4/scripts/t4c_ablation_summary.py
+```
+
+Determinism: `random_state=42` everywhere; splits reproduce exactly by build id;
+predictions reproduce to `atol=1e-9` (sub-ULP parallel-sum noise only).
+
+## 2. Workflow
+
+**Offline** (`run_offline.py` + `bfp/`): load CSV chunked → dedup job-rows to builds →
+label (`passed`=0, else 1; drop `started`) → drop leakage columns → engineered + history
+features → grouped split by project → fit preprocessor on train only → RF grid search on
+80k stratified subsample (StratifiedGroupKFold-5, F-beta β=2) → refit on full train_fit →
+Platt calibration on grouped calib subset → τ1/τ2 selected on validation only → TreeSHAP →
+save all artifacts.
+
+**Online** (`bfp/inference.py`, deployed in `demo-app/` on GitHub Actions): live feature
+extraction (git diff / repo metadata / own prior gate runs) → saved preprocessor → RF →
+Platt → p → three-state decision (p<τ1 PASS; <τ2 WARN; else ROLLBACK) → TreeSHAP →
+LLM report (WARN/ROLLBACK only; see `LLM_PROMPT.md`). ROLLBACK genuinely blocks the test
+job (real early stop).
+
+## 3. Dataset (TravisTorrent 2017, `final-2017.csv`)
+
+| fact | value |
+|---|---|
+| raw records (job level) | 3,881,992 (~4.19 jobs/build; features constant within a build) |
+| builds after dedup (1 `started` dropped) | **925,896** |
+| failed / passed | 234,732 / 691,164 → failure rate **0.2535** |
+| 4-way status | passed 74.65%, failed 18.06%, errored 6.94%, canceled 0.35% |
+| projects | **948** (languages: go, java, python, ruby) |
+
+## 4. Features (32) & leakage control
+
+- **20 numeric raw** (team size, churn/diff sizes, test density, repo age/commits, …)
+- **4 categorical** (label-encoded, maps saved): `gh_lang`, `gh_is_pr`, `gh_by_core_team_member`, `git_prev_commit_resolution_status`
+- **2 engineered**: `churn_ratio = test_churn/(src_churn+1)`; `test_coverage_proxy = test_lines_per_kloc × sloc / 1000`
+- **6 history** (per project, strictly-prior, shift-by-1): `hist_prev_status`, `hist_fail_rate_5/20/all`, `hist_consec_fail`, `hist_build_seq`
+
+**Dropped: 42 of 66 raw columns** = 22 post-outcome (incl. the caught strong leak
+`tr_log_status` — failure rate 0.85–1.00 conditioned on it) + 16 ids/hashes/timestamps +
+4 missingness/no-signal. Row-level leakage prevented by **grouped-by-project split**
+(no project on two sides; also grouped CV and grouped calib carve).
+Leakage alarms on the final model: test ROC-AUC 0.8602 < 0.99 ✓, max feature importance
+0.2808 < 0.50 ✓. Guarded by **9 pytest tests** (column/signal/row/temporal leakage,
+train-vs-inference consistency, no-test-contamination, reproducibility, threshold
+ordering, end-to-end smoke).
+
+## 5. Split (grouped by project, 70/15/15, seed 42)
+
+| split | builds | projects | failure rate |
+|---|---|---|---|
+| train | 663,911 | 662 | 0.2640 |
+| ├ train_fit | 540,695 | 562 | 0.2794 |
+| └ calib | 123,216 | 100 | 0.1967 |
+| val | 123,316 | 143 | 0.2120 |
+| test | **138,669** | **143** | 0.2401 |
+
+## 6. Model, tuning, thresholds
+
+- RF fixed: `criterion=gini`, `class_weight=balanced`, `random_state=42`.
+- Grid = 2×2×3×2 = **24 candidates**: n_estimators {200,400} × max_depth {None,16} ×
+  min_samples_leaf {1,5,20} × max_features {"sqrt",0.4}.
+- **Best (CV F-beta 0.7328):** `n_estimators=400, max_depth=16, min_samples_leaf=20, max_features=0.4`.
+  Finding: all top-8 candidates share `min_samples_leaf=20`; all `=1` candidates are the bottom 8.
+  Full 24-row CV table: `artifacts/grid_search.json`.
+- Platt calibration (LogisticRegression, C=1e6, no class weight) on the calib subset.
+- Thresholds on **validation only**: τ1 = largest τ with Recall ≥ r*=0.80; τ2 = smallest
+  τ>τ1 with Precision ≥ p*=0.70. **τ1 = 0.1119, τ2 = 0.4662**; both targets met exactly
+  (recall 0.8000, precision 0.7000); no fallback fired. Note: policy sits exactly at the
+  boundary — stricter targets would trigger the documented fallbacks.
+
+## 7. Final metrics (`artifacts/metrics.json`)
+
+| split | ROC-AUC | PR-AUC | Brier | P@τ1 | R@τ1 | F1@τ1 | MCC@τ1 |
+|---|---|---|---|---|---|---|---|
+| train | 0.9225 | 0.8621 | 0.0940 | 0.5522 | 0.9163 | 0.6892 | 0.5653 |
+| val | 0.8477 | 0.6902 | 0.1092 | 0.4342 | 0.8000 | 0.5629 | 0.4353 |
+| **test** | **0.8602** | **0.7489** | **0.1105** | 0.4747 | 0.8220 | 0.6019 | 0.4634 |
+
+**Three-state confusion (test, actual × decision):**
+
+| actual \ decision | PASS | WARN | ROLLBACK |
+|---|---|---|---|
+| pass (105,376) | 75,097 | 23,084 | 7,195 |
+| fail (33,293) | 5,926 | 7,554 | 19,813 |
+
+Derived: ROLLBACK precision **0.7336**; failures flagged (WARN+ROLLBACK) **82.2%**;
+missed failures 17.8% of fails = **7.3% false-pass rate**.
+
+**Importance (RF):** hist_consec_fail 0.2808, hist_prev_status 0.2632, hist_fail_rate_5
+0.1490, hist_fail_rate_20 0.1022, hist_fail_rate_all 0.0568, then non-history ≤0.016.
+**Mean |TreeSHAP| (500 test rows):** same five history features on top (0.067–0.035).
+
+## 8. Ablation (the central finding; `chapter4/ablation/`, fully re-runnable)
+
+| configuration | ROC-AUC | PR-AUC | Brier | status |
+|---|---|---|---|---|
+| diff-only, grouped (cross-project) | **0.5149** | 0.2516 | 0.1887 | honest — near random |
+| diff-only, random split | **0.8332** | 0.6938 | — | DIAGNOSTIC — project-identity leakage (929/930 test projects also in train), NOT a result |
+| diff+history, grouped — **final** | **0.8602** | **0.7489** | 0.1105 | reported model |
+
+## 9. Online phase (GitHub Actions) & LLM layer
+
+- Demo repo: `bfp-cicd-risk-gate-demo` (mirrored in `demo-app/`); gate job runs before
+  tests; all 32 features generated live; the vendored model (96 MB) is byte-different but
+  **prediction-identical** to `models/rf_model.joblib` (317 MB) — lossless compression for
+  GitHub's 100 MB limit, verified (identical trees/nodes, Δproba ≈ 5e-17).
+- Evidence of the initial live runs is preserved in `demo-app/ci_gate_runs/commit{2..6}/`
+  and `chapter4/tables/4_6_5_realworld_case_study.md`. The thesis presents the deployment
+  **generalized** (no per-run numbers) — a larger, properly-designed online test campaign
+  is planned (see Open items).
+- LLM analysis layer: called **only for WARN/ROLLBACK** (verified: PASS produces no call).
+  Prompt spec = `LLM_PROMPT.md` (the four-section developer-facing prompt + FEATURE_LABELS
+  + risk-margin input). Model: Llama-family open-weight via API; prompt contract is
+  model/host-independent. Real generated examples: `chapter4/tables/4_7_*`.
+
+## 10. Artifacts map
+
+| path | contents |
+|---|---|
+| `models/` | preprocessor (cat_maps_/medians), rf_model, calibrator, thresholds.json, feature_order.json, shap_background.npy |
+| `artifacts/` | metrics.json, grid_search.json, feature_importances.json, shap_summary.json, threshold_sweep_val.csv, metadata.json (versions/seed/split/alarms), *.png |
+| `chapter4/tables|figures/` | generated thesis tables/figures (never hand-typed); `chapter4/scripts/` regenerates each |
+| `chapter4/ablation/` | isolated ablation artifacts (env-var paths, never clobber main) |
+| `demo-app/` | online deployment (mirror of the GitHub demo repo) + saved live-run payloads |
+| `tests/` | the 9 verification tests (fast 250k-row fixture; verify logic, not the headline numbers) |
+
+## 11. Online evaluation campaign (2026-07-10 — DONE)
+
+Executed per `CAMPAIGN_PLAN.md`: 9 public repos × 50 real commits, shadow-mode gate
+(records, never blocks → every build has a real pytest label + uncontaminated history),
+warm-up 20 runs/repo, same saved model/thresholds as offline. **Final numbers only in
+`campaign/results/FINAL.md`** (271 scored builds: ROC-AUC 0.6038; decomposition —
+continuation failures 30/30 flagged, AUC 0.936; first-of-streak 0/23, AUC 0.170; zero
+live-vs-rederived decision mismatches). Raw evidence: `campaign/results/runs.csv`;
+pilot (v1 generator, design iteration) archived as `runs_pilot01_v1generator.csv`.
+Two LLM worked examples (real true positives): `campaign/results/llm_examples/`.
+
+## 12. Current thesis state (2026-07-10) & open items
+
+**Integrated into `chapter4_v2.docx` (verified 29/29 checks):** §۴-۶ = online campaign
+(protocol/results/decomposition, جدول ۴-۱۵ و ۴-۱۶, styled like the chapter's tables),
+§۴-۷ examples = live campaign builds (rubric renumbered to جدول ۴-۱۷), §۴-۸ has the
+campaign numbers, model named in §۴-۷ as «Llama-3.3-Nemotron-Super-49B» (Ch3 stays
+generic «خانواده Llama»; API provider never named in thesis text).
+Backup of pre-campaign chapter: `chapter4_v2_backup_pre_campaign.docx`.
+
+**Open items:**
+- **Chapter 5** (conclusions/limitations/future work) — to write. Cold-start scope note
+  and the human-study of LLM-report usefulness go here as future work.
+- **شکل ۴-۱۰** — insert `campaign/results/prob_distribution.png` at the marked
+  placeholder in §۴-۶-۲ (manual, in Word).
+- **جدول ۳-۱** (Chapter-3 symbol table) — compact version built; user inserts manually.
+- **Self-hosted Llama** — move the LLM layer from the API provider to a self-hosted
+  Llama-family model (same prompt contract; no thesis text change needed).

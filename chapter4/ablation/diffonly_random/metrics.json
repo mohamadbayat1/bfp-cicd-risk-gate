@@ -1,0 +1,21 @@
+{
+  "provenance": "DIAGNOSTIC \u2014 random (non-grouped) split on diff-only features; NOT a candidate model; demonstrates project-identity leakage under naive splitting. Same features + same hyperparameters as the diff-only/grouped ablation row; only the split strategy differs.",
+  "params_used": {
+    "max_depth": 16,
+    "max_features": "sqrt",
+    "min_samples_leaf": 20,
+    "n_estimators": 400
+  },
+  "n_train": 787011,
+  "n_test": 138885,
+  "roc_auc": 0.8331902385679036,
+  "pr_auc": 0.6938190635499051,
+  "brier": null,
+  "project_overlap": {
+    "train_projects": 947,
+    "test_projects": 930,
+    "overlap_projects": 929,
+    "overlap_pct_of_test_projects": 0.9989247311827957
+  },
+  "seed": 42
+}

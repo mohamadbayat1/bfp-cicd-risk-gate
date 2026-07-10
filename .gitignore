@@ -21,3 +21,17 @@ artifacts/
 Thumbs.db
 .vscode/
 .idea/
+.github_token
+
+# Nested repos / generated working copies (each campaign repo is its own git repo)
+demo-app/
+campaign/work/
+
+# Thesis manuscripts & supervisor correspondence stay off GitHub (shared privately)
+*.docx
+~$*
+master.md
+chapter_fixes/
+
+# Legacy docx build toolchain (local only)
+chapter4_docx/

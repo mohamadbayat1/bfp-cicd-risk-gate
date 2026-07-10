@@ -6,10 +6,13 @@ from __future__ import annotations
 import os
 
 # ----------------------------------------------------------------------------- paths
+# MODELS_DIR / ARTIFACTS_DIR are overridable via env vars so ablation re-runs (Chapter 4,
+# section 4-5) can write to a separate location instead of clobbering the main run's
+# artifacts/models. Defaults are unchanged from before -> normal runs are unaffected.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW_CSV = os.path.join(ROOT, "final-2017.csv")
-MODELS_DIR = os.path.join(ROOT, "models")
-ARTIFACTS_DIR = os.path.join(ROOT, "artifacts")
+MODELS_DIR = os.environ.get("BFP_MODELS_DIR", os.path.join(ROOT, "models"))
+ARTIFACTS_DIR = os.environ.get("BFP_ARTIFACTS_DIR", os.path.join(ROOT, "artifacts"))
 
 # ----------------------------------------------------------------------------- reproducibility
 SEED = 42
@@ -45,7 +48,9 @@ FEATURES_ENGINEERED = ["churn_ratio", "test_coverage_proxy"]
 # at trigger time (the project's earlier build outcomes) -> legitimate, NOT leakage.
 # This is the transferable signal ("recently-failing projects keep failing") that
 # generalizes across projects, unlike raw project identity.
-USE_HISTORY = True
+# Overridable via env var for the ablation re-run (Chapter 4, section 4-5: diff-only
+# vs diff+history). Default True is unchanged from before.
+USE_HISTORY = os.environ.get("BFP_USE_HISTORY", "1") != "0"
 FEATURES_HISTORICAL = [
     "hist_prev_status",     # outcome of the immediately previous build (0/1)
     "hist_fail_rate_5",     # mean failure over previous 5 builds
