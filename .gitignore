@@ -32,6 +32,7 @@ campaign/work/
 ~$*
 master.md
 chapter_fixes/
+DEFENSE_NOTES.md
 
 # Legacy docx build toolchain (local only)
 chapter4_docx/

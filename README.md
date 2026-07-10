@@ -36,11 +36,11 @@ trained model + `bfp` inference code and runs a GitHub Actions **risk-gate job b
 the test job**. ROLLBACK genuinely blocks the pipeline (real early stop). The main repo
 never runs Actions itself; `campaign/orchestrate.py` generates the deployment repos.
 
-- Demo (blocking gate): `bfp-cicd-risk-gate-demo`
-- Evaluation campaign (shadow gate, full Actions run history = the evidence):
-  `bfp-campaign-01` (archived pilot), `bfp-campaign-02` … `bfp-campaign-10`
-  *(links/account may change after repo transfer; see the Actions tab of each repo
-  for the 450 real runs)*
+- Demo (blocking gate): [`bfp-cicd-risk-gate-demo`](https://github.com/novavisionstudio-byte/bfp-cicd-risk-gate-demo)
+- Evaluation campaign (shadow gate; each repo's **Actions tab** holds its 50 real runs —
+  the campaign's raw evidence): [`bfp-campaign-02`](https://github.com/novavisionstudio-byte/bfp-campaign-02) …
+  [`bfp-campaign-10`](https://github.com/novavisionstudio-byte/bfp-campaign-10), plus
+  [`bfp-campaign-01`](https://github.com/novavisionstudio-byte/bfp-campaign-01) (archived pilot, design iteration — excluded from results)
 
 ## Reproduce everything
 
