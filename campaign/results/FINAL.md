@@ -41,7 +41,7 @@ Failures split by whether the previous build had already failed:
 | **continuation** (previous build failed) | 30 | **30/30 = 100%** | **0.936** | 0.560 |
 | **first-of-streak** (previous build passed) | 23 | **0/23 = 0%** | 0.170 | 0.066 |
 
-The live deployment reproduces both halves of the offline ablation (§۴-۵):
+The live deployment reproduces both halves of the offline ablation:
 the per-project history signal transfers to a real pipeline at offline-level strength
 (0.936 ≈ 0.86 offline), while novel-onset failures — where only diff-level signal
 exists — are undetectable (offline diff-only cross-project AUC was 0.515 ≈ random).

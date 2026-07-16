@@ -1,10 +1,10 @@
 """Generate the campaign's 2 LLM worked examples (1 WARN + 1 ROLLBACK).
 
-Reuses the EXACT prompt-v2 workflow from chapter4/scripts/t8 (same FEATURE_LABELS,
+Reuses the production prompt workflow (same FEATURE_LABELS,
 risk_margin, render_prompt_v2, call_hermes) on two real, scored, true-positive
 campaign builds. Categorical feature values are decoded to their original string
 labels via the saved preprocessor (the LLM_PROMPT.md rule). Output: one md file per
-example in campaign/results/llm_examples/, same layout as chapter4/tables/4_7_* files.
+example in campaign/results/llm_examples/.
 """
 from __future__ import annotations
 import csv
@@ -100,7 +100,7 @@ def main():
             f.write(f"# Campaign LLM example — {res['decision']} "
                     f"({case['repo']} commit #{case['seq']})\n\n"
                     f"_Generated {datetime.now(timezone.utc).isoformat()} — real scored campaign build; "
-                    f"true positive (the build genuinely failed). Prompt v2, same workflow as chapter4/tables/4_7_*._\n\n"
+                    f"true positive (the build genuinely failed). Generated with the production prompt (see LLM_PROMPT.md)._\n\n"
                     f"## Input payload (real, categoricals decoded)\n\n```json\n"
                     f"{json.dumps(payload, indent=2)}\n```\n\n"
                     f"## LLM-generated report (verbatim)\n\n{response}\n")

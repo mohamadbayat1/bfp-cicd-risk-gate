@@ -4,7 +4,7 @@
 developer-facing prompt described in thesis Chapters 3–4. It was refined through
 testing against real model outputs on real builds (see "Design notes" at the end);
 this file contains only the final version. Real generated examples live in
-`chapter4/tables/4_7_*`.
+`campaign/results/llm_examples/`.
 
 **Model:** a Llama-family open-weight model, called through an API. The prompt contract
 is model- and host-independent; the planned production setup is a **self-hosted
@@ -13,12 +13,12 @@ convenience and is not part of the design).
 
 **Exact model used for every generated example (reproducibility):**
 `nvidia/llama-3.3-nemotron-super-49b-v1.5` — a 49B-parameter Llama-3.3 derivative.
-The thesis (Chapter 4 §۴-۷) names it as «Llama-3.3-Nemotron-Super-49B»; the API
+The thesis names it as «Llama-3.3-Nemotron-Super-49B»; the API
 provider is deliberately not named in thesis text.
 
 **Invocation policy:** the layer is called **only for WARN and ROLLBACK** decisions —
 a PASS build gets no LLM call at all (verified with a real three-state test:
-`chapter4/tables/4_7_5_conditional_policy_test.md`). The layer is explanation-only;
+the archived conditional-policy test record). The layer is explanation-only;
 it never changes the gate decision.
 
 ---
@@ -181,5 +181,4 @@ designed on paper. Concretely:
 - **Completeness:** the "mention every provided feature" rule exists because one report
   silently dropped a feature.
 
-Real before/after evidence and worked examples: `chapter4/tables/4_7_4_v2_comparison_*.md`,
-`chapter4/tables/4_7_1_*`, `chapter4/tables/4_7_3_batch20/`.
+Final worked examples: `campaign/results/llm_examples/`; earlier exploratory batches are preserved in git history (commit `c93f4a4`, under `chapter4/tables/`).

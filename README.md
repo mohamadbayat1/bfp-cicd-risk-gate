@@ -20,7 +20,7 @@ pipeline, with a TreeSHAP explainability layer and an LLM-generated developer re
 | [`RESULTS.md`](RESULTS.md) | full offline workflow + every verified number + reproduction commands |
 | [`campaign/results/FINAL.md`](campaign/results/FINAL.md) | online evaluation campaign — final numbers only |
 | [`LLM_PROMPT.md`](LLM_PROMPT.md) | the production prompt of the LLM analysis layer (+ exact model id) |
-| `chapter4/tables/*.md` | generated evidence tables (never hand-typed; each has a regenerating script) |
+| [`evidence/EVIDENCE_INDEX.md`](evidence/EVIDENCE_INDEX.md) | generated evidence tables/figures (never hand-typed) + verified key numbers; raw ablation artifacts in `evidence/ablation/` |
 
 ## Two-phase architecture
 
@@ -50,10 +50,11 @@ pip install -r requirements.txt        # pinned versions (python 3.12.10, seed 4
 # https://travistorrent.testroots.org/
 python run_offline.py                  # full offline pipeline (~15 min)
 pytest -q                              # 9 leakage/consistency verification tests
-python chapter4/scripts/t1_*.py        # regenerate chapter tables/figures
 python campaign/orchestrate.py --repos 9 --start-index 2 --commits 50   # online campaign
 python campaign/score.py               # score it (warm-up rule, metrics, figures)
 ```
 
-Large files (dataset 3.5 GB, trained model 317 MB, run CSVs, figures) are deliberately
-not committed — everything regenerates deterministically from the commands above.
+Large files (dataset 3.5 GB, trained model 317 MB, run CSVs, working figures) are
+deliberately not committed — everything regenerates deterministically from the commands
+above. The small final evidence figures (`evidence/figures/`, ~0.5 MB) are committed as
+thesis evidence.

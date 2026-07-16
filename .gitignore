@@ -33,6 +33,15 @@ campaign/work/
 master.md
 chapter_fixes/
 DEFENSE_NOTES.md
+READ_ME_TOMORROW.md
+COHERENCE_AUDIT.md
+DATA_LOCATIONS.md
 
 # Legacy docx build toolchain (local only)
 chapter4_docx/
+
+# Thesis working files (local only)
+_archive_do_not_read/
+__review_v1/
+THESIS_FIX_PLAN.md
+*.rar
