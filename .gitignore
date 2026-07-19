@@ -1,6 +1,5 @@
 # Data (large raw CSV — never commit)
 *.csv
-final-2017.csv
 
 # Python
 __pycache__/
@@ -21,29 +20,13 @@ artifacts/
 Thumbs.db
 .vscode/
 .idea/
-.github_token
 
-# Nested repos / generated working copies (each campaign repo is its own git repo)
+# Nested repos / generated working copies
 demo-app/
 campaign/work/
 
-# Thesis manuscripts & supervisor correspondence stay off GitHub (shared privately)
+# Local documents & working notes (generic patterns only;
+# specific private filenames are kept in .git/info/exclude, which is never pushed)
 *.docx
-~$*
-master.md
-chapter_fixes/
-DEFENSE_NOTES.md
-READ_ME_TOMORROW.md
-COHERENCE_AUDIT.md
-DATA_LOCATIONS.md
-
-# Legacy docx build toolchain (local only)
-chapter4_docx/
-
-# Thesis working files (local only)
-_archive_do_not_read/
-__review_v1/
-THESIS_FIX_PLAN.md
 *.rar
-ITEM6_FINDINGS.md
-CH4_READABILITY.md
+~$*
